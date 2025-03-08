@@ -1,7 +1,7 @@
 import sqlite3
 
 # Kết nối hoặc tạo database nếu chưa có
-conn = sqlite3.connect("attendance.db")
+conn = sqlite3.connect("../attendance.db")
 cursor = conn.cursor()
 
 # Tạo bảng user

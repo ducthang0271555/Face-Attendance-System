@@ -6,7 +6,7 @@ is_logged_in = False
 def login(username, password):
     global is_logged_in
 
-    with sqlite3.connect("../attendance.db") as conn:
+    with sqlite3.connect("./attendance.db") as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT password FROM users WHERE username = ?", (username,))
         result = cursor.fetchone()

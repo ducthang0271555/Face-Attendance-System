@@ -1,7 +1,7 @@
 import sqlite3
 
 def initialize_db():
-    conn = sqlite3.connect("../attendance.db")
+    conn = sqlite3.connect("./attendance.db")
     cursor = conn.cursor()
 
     # Tạo bảng user
@@ -48,6 +48,5 @@ def initialize_db():
 
     print("Database initialized successfully!")
 
-# Nếu chạy trực tiếp file này, tự động khởi tạo DB
 if __name__ == "__main__":
     initialize_db()

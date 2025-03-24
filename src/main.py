@@ -1,5 +1,5 @@
-from src.database import initialize_db
-from src.gui import start_gui
+from database import initialize_db
+from gui import start_gui
 
 def main():
     print("🔹 Khởi tạo cơ sở dữ liệu...")

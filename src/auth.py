@@ -29,7 +29,7 @@ def register(username, password):
         messagebox.showwarning("Lỗi", "Vui lòng nhập đủ thông tin!")
         return
 
-    conn = sqlite3.connect("../attendance.db")
+    conn = sqlite3.connect("./attendance.db")
     cursor = conn.cursor()
 
     try:

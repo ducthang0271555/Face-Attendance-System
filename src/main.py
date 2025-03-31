@@ -1,13 +1,11 @@
-from database import initialize_db
-from gui import start_gui
-import os
-
-def main():
-    print("🔹 Khởi tạo cơ sở dữ liệu...")
-    initialize_db()
-
-    print("🔹 Mở giao diện...")
-    start_gui()
+from database import Database
+from gui import AttendanceApp
+import tkinter as tk
 
 if __name__ == "__main__":
-    main()
+    db = Database()
+    db.close()
+
+    root = tk.Tk()
+    app = AttendanceApp(root)
+    root.mainloop()

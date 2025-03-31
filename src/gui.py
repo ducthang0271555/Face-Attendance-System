@@ -1,24 +1,131 @@
 import tkinter as tk
-import cv2
-import os
-import auth
 from tkinter import messagebox
-
-from database import save_employee
-from database import cancel_employee
-from utils.camera import capture_image
-
+from auth import login, register
+from database import Database
+from src.utils.camera import capture_image
 
 
+class AttendanceApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Hệ Thống Chấm Công")
+        self.root.geometry("300x500")
+
+        self.main_frame = tk.Frame(root)
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
+
+        self.login_button = tk.Button(self.main_frame, text="Đăng Nhập", command=self.show_login_form, width=15,
+                                      height=2)
+        self.login_button.pack(pady=20)
+        self.attendance_button = tk.Button(self.main_frame, text="Chấm Công", command=self.attendance, width=15,
+                                           height=2)
+        self.attendance_button.pack(pady=10)
+
+    def show_login_form(self):
+        for widget in self.main_frame.winfo_children():
+            widget.destroy()
+
+        tk.Label(self.main_frame, text="Tên đăng nhập:").pack(pady=5)
+        self.username_entry = tk.Entry(self.main_frame)
+        self.username_entry.pack(pady=5)
+
+        tk.Label(self.main_frame, text="Mật khẩu:").pack(pady=5)
+        self.password_entry = tk.Entry(self.main_frame, show="*")
+        self.password_entry.pack(pady=5)
+
+        tk.Button(self.main_frame, text="Đăng Nhập", command=lambda: self.login()).pack(pady=10)
+        tk.Button(self.main_frame, text="Quay Lại", command=self.show_main_buttons).pack(pady=5)
+
+    def login(self):
+        username = self.username_entry.get()
+        password = self.password_entry.get()
+
+        if login(username, password):
+            messagebox.showinfo("Thành công", "Đăng nhập thành công!")
+            self.show_manager_ui()
+        else:
+            messagebox.showerror("Lỗi", "Sai tên đăng nhập hoặc mật khẩu!")
+
+    def logout(self):
+        global is_logged_in
+        is_logged_in = False
+        messagebox.showinfo("Đăng xuất", "Bạn đã đăng xuất thành công!")
+        self.show_main_buttons()
+
+    def attendance(self):
+        messagebox.showerror("Hehe", "Co cai cc")
+
+    def show_manager_ui(self):
+        for widget in self.main_frame.winfo_children():
+            widget.destroy()
+
+        tk.Button(self.main_frame, text="Đăng ký", command= lambda: self.show_register_form(), width=15, height=2).pack(pady=10)
+        tk.Button(self.main_frame, text="Thêm nhân viên", command= lambda: self.show_add_employee(), width=15, height=2).pack(pady=10)
+        tk.Button(self.main_frame, text="Danh sách nhân viên", width=15, height=2).pack(pady=10)
+        tk.Button(self.main_frame, text="Đăng xuất", width=15, height=2, command=self.logout).pack(pady=10)
 
 
-def start_gui():
-    root = tk.Tk()
-    root.title("Face Recognition Attendance System")
-    root.geometry("400x600")
+    def show_main_buttons(self):
+        for widget in self.main_frame.winfo_children():
+            widget.destroy()
 
-    def format_dob(event):
-        text = entry_dob.get()
+        self.login_button = tk.Button(self.main_frame, text="Đăng Nhập", command=self.show_login_form, width=15,
+                                      height=2)
+        self.login_button.pack(pady=20)
+
+        self.attendance_button = tk.Button(self.main_frame, text="Chấm Công", command=self.attendance, width=15,
+                                           height=2)
+        self.attendance_button.pack(pady=10)
+
+    def show_register_form(self):
+        for widget in self.main_frame.winfo_children():
+            widget.destroy()
+
+        tk.Label(self.main_frame, text="Tên đăng nhập:").pack(pady=5)
+        self.username_entry = tk.Entry(self.main_frame)
+        self.username_entry.pack(pady=5)
+
+        tk.Label(self.main_frame, text="Mật khẩu:").pack(pady=5)
+        self.password_entry = tk.Entry(self.main_frame, show="*")
+        self.password_entry.pack(pady=5)
+
+        tk.Button(self.main_frame, text="Đăng ký", command= self.register_manager).pack(pady=10)
+        tk.Button(self.main_frame, text="Quay Lại", command=self.show_manager_ui).pack(pady=5)
+
+    def show_add_employee(self):
+        for widget in self.main_frame.winfo_children():
+            widget.destroy()
+
+        tk.Label(self.main_frame, text="Mã nhân viên:").pack(pady=5)
+        self.employee_code_var = tk.StringVar(value="NV")
+        tk.OptionMenu(self.main_frame, self.employee_code_var, "NV", "TP", "GD").pack(pady=5)
+
+        tk.Label(self.main_frame, text="Tên:").pack(pady=5)
+        self.name_entry = tk.Entry(self.main_frame)
+        self.name_entry.pack(pady=5)
+
+        tk.Label(self.main_frame, text="Giới tính:").pack(pady=5)
+        self.gender_var = tk.StringVar(value="Khác")
+        tk.OptionMenu(self.main_frame, self.gender_var, "Nam", "Nữ", "Khác").pack(pady=5)
+
+        tk.Label(self.main_frame, text="Ngày sinh:").pack(pady=5)
+        self.dob_entry = tk.Entry(self.main_frame)
+        self.dob_entry.pack(pady=5)
+        self.dob_entry.bind("<KeyRelease>", self.format_dob)
+
+        tk.Label(self.main_frame, text="Số điện thoại:").pack(pady=5)
+        self.phone_entry = tk.Entry(self.main_frame)
+        self.phone_entry.pack(pady=5)
+
+        tk.Label(self.main_frame, text="Địa chỉ:").pack(pady=5)
+        self.address_entry = tk.Entry(self.main_frame)
+        self.address_entry.pack(pady=5)
+
+        tk.Button(self.main_frame, text="Thêm nhân viên", command=self.save_and_capture).pack(pady=10)
+        tk.Button(self.main_frame, text="Quay Lại", command=self.show_manager_ui).pack(pady=5)
+
+    def format_dob(self, event):
+        text = self.dob_entry.get()
         text = ''.join(filter(str.isdigit, text))
         if len(text) > 2:
             text = text[:2] + '/' + text[2:]
@@ -27,186 +134,44 @@ def start_gui():
         if len(text) > 10:
             text = text[:10]
 
-        entry_dob.delete(0, tk.END)
-        entry_dob.insert(0, text)
-        entry_dob.icursor(tk.END)
+        self.dob_entry.delete(0, tk.END)
+        self.dob_entry.insert(0, text)
+        self.dob_entry.icursor(tk.END)
 
-    entry_username = tk.Entry(root)
-    entry_password = tk.Entry(root, show="*")
-    entry_employee_name = tk.Entry(root)
-    employee_code_var = tk.StringVar()
-    employee_code_var.set("NV")
-    option_employee_code = tk.OptionMenu(root, employee_code_var, "NV", "TP", "GĐ")
-    employee_gender = tk.StringVar()
-    employee_gender.set("Khác")
-    option_employee_gender = tk.OptionMenu(root, employee_gender, "Khác", "Nam", "Nữ")
-    entry_dob = tk.Entry(root)
-    entry_phone = tk.Entry(root)
-    entry_address = tk.Entry(root)
-    entry_dob.bind("<KeyRelease>", format_dob)
+    def register_manager(self):
+        username = self.username_entry.get()
+        password = self.password_entry.get()
 
-    def show_initial_ui():
-        close_all_btn_label_entry_option()
+        if not username or not password:
+            messagebox.showwarning("Lỗi", "Vui lòng nhập đủ thông tin!")
+            return
 
-        btn_login.pack(pady=5)
-        btn_attendance.pack(pady=5)
+        if register(username, password):
+            messagebox.showinfo("Thành công", "Đăng ký thành công!")
+            return
+        messagebox.showerror("Lỗi", "Tên đăng nhập đã tồn tại!")
 
-    def show_login_form():
-        close_all_btn_label_entry_option()
-        label_username.pack()
-        entry_username.pack()
-        label_password.pack()
-        entry_password.pack()
-        btn_login_confirm.pack(pady=5)
-        btn_back.pack(pady=5)
+    def save_and_capture(self):
+        employee_code = self.employee_code_var.get()
+        name = self.name_entry.get()
+        gender = self.gender_var.get()
+        dob = self.dob_entry.get().strip()
+        phone = self.phone_entry.get().strip()
+        address = self.address_entry.get().strip()
 
-    def show_register_form():
-        close_all_btn_label_entry_option()
-
-        entry_username.delete(0, tk.END)
-        entry_password.delete(0, tk.END)
-        label_username.pack(pady=5)
-        entry_username.pack(pady=5)
-        label_password.pack(pady=5)
-        entry_password.pack(pady=5)
-        btn_register_confirm.pack(pady=5)
-        btn_back_to_admin_ui.pack(pady=5)
-
-    def login_action():
-        username = entry_username.get()
-        password = entry_password.get()
-
-        if auth.login(username, password):
-            show_admin_ui()
-
-    def register_action():
-        username_register = entry_username.get()
-        password_register = entry_password.get()
-        auth.register(username_register, password_register)
-        entry_username.delete(0, tk.END)
-        entry_password.delete(0, tk.END)
-
-    def go_back():
-        close_all_btn_label_entry_option()
-        show_initial_ui()
-
-    def go_back_to_admin_ui():
-        close_all_btn_label_entry_option()
-        show_admin_ui()
-
-    def show_admin_ui():
-        close_all_btn_label_entry_option()
-
-        btn_register_admin.pack(pady=5)
-        btn_add_employee.pack(pady=5)
-        btn_update_employee.pack(pady=5)
-        btn_logout.pack(pady=5)
-
-    def show_add_employee():
-        close_all_btn_label_entry_option()
-
-        entry_employee_name.delete(0, tk.END)
-        employee_gender.set("Khác")
-        entry_dob.delete(0, tk.END)
-        entry_address.delete(0, tk.END)
-        entry_phone.delete(0, tk.END)
-        label_employee_code.pack(pady=5)
-        option_employee_code.pack(pady=5)
-        label_employee_name.pack(pady=5)
-        entry_employee_name.pack(pady=5)
-        label_gender.pack(pady=5)
-        option_employee_gender.pack(pady=5)
-        label_DOB.pack(pady=5)
-        entry_dob.pack(pady=5)
-        label_phone.pack(pady=5)
-        entry_phone.pack(pady=5)
-        label_address.pack(pady=5)
-        entry_address.pack(pady=5)
-        btn_add_employee_confirm.pack(pady=5)
-        btn_back_to_admin_ui.pack(pady=5)
-
-    def logout():
-        auth.logout()
-        entry_username.delete(0, tk.END)
-        entry_password.delete(0, tk.END)
-        show_initial_ui()
-
-    def close_all_btn_label_entry_option():
-        btn_login.pack_forget()
-        btn_attendance.pack_forget()
-        btn_login_confirm.pack_forget()
-        btn_back.pack_forget()
-        btn_logout.pack_forget()
-        btn_add_employee.pack_forget()
-        btn_update_employee.pack_forget()
-        btn_register_admin.pack_forget()
-        btn_register_confirm.pack_forget()
-        btn_back_to_admin_ui.pack_forget()
-        btn_add_employee_confirm.pack_forget()
-
-        label_username.pack_forget()
-        label_password.pack_forget()
-        label_employee_code.pack_forget()
-        label_employee_name.pack_forget()
-        label_gender.pack_forget()
-        label_DOB.pack_forget()
-        label_phone.pack_forget()
-        label_address.pack_forget()
-
-        entry_username.pack_forget()
-        entry_password.pack_forget()
-        entry_employee_name.pack_forget()
-        entry_dob.pack_forget()
-        entry_phone.pack_forget()
-        entry_address.pack_forget()
-
-        option_employee_code.pack_forget()
-        option_employee_gender.pack_forget()
-
-    def attendance():
-        messagebox.showinfo("Thành công", "Co cai cc, chua lam dau")
-
-    def save_and_capture():
-        employee_code = employee_code_var.get()
-        employee_name = entry_employee_name.get().strip()
-        gender = employee_gender.get()
-        dob = entry_dob.get().strip()
-        phone = entry_phone.get().strip()
-        address = entry_address.get().strip()
-
-        if not employee_name or not dob or not phone or not address:
+        if not name or not dob or not phone or not address:
             messagebox.showerror("Lỗi", "Vui lòng nhập đầy đủ thông tin nhân viên.")
             return
 
-        employee_id = save_employee(employee_code, employee_name, gender, dob, phone, address)
+        db = Database()
+        employee_id = db.save_employee(employee_code, name, gender, dob, phone, address)
 
         confirm = messagebox.askokcancel("Thành công", "Thêm nhân viên thành công, tiến hành chụp ảnh nhân viên?")
         if confirm:
-            capture_image(employee_code, employee_name, employee_id, entry_employee_name, entry_dob, entry_phone,
-                          entry_address)
+            capture_image(employee_id, employee_code, name)
         else:
-            cancel_employee(employee_id)
+            db.cancel_employee(employee_id)
 
-    label_username = tk.Label(root, text="Tên đăng nhập:")
-    label_password = tk.Label(root, text="Mật khẩu:")
-    label_employee_code = tk.Label(root, text="Mã nhân viên:")
-    label_employee_name = tk.Label(root, text="Tên nhân viên:")
-    label_gender = tk.Label(root, text="Giới tính:")
-    label_DOB = tk.Label(root, text="Ngày sinh:")
-    label_phone = tk.Label(root, text="Số điện thoại")
-    label_address = tk.Label(root, text="Địa chỉ:")
 
-    btn_login = tk.Button(root, text="Đăng nhập", command=show_login_form, width=20, height=2)
-    btn_attendance = tk.Button(root, text="Chấm công", command=attendance, width=20, height=2)
-    btn_login_confirm = tk.Button(root, text="Xác nhận đăng nhập", command=login_action, width=20, height=2)
-    btn_back = tk.Button(root, text="Quay lại", command=go_back, width=20, height=2)
-    btn_logout = tk.Button(root, text="Đăng xuất", command=logout, width=20, height=2)
-    btn_add_employee = tk.Button(root, text="Thêm nhân viên", command=show_add_employee, width=20, height=2)
-    btn_update_employee = tk.Button(root, text="Cập nhật nhân viên", width=20, height=2)
-    btn_register_admin = tk.Button(root, text="Đăng ký", command=show_register_form, width=20, height=2)
-    btn_register_confirm = tk.Button(root, text="Xác nhận đăng ký", command=register_action, width=20, height=2)
-    btn_back_to_admin_ui = tk.Button(root, text="Quay lại", command=go_back_to_admin_ui, width=20, height=2)
-    btn_add_employee_confirm = tk.Button(root, text="Thêm nhân viên", command= lambda: save_and_capture(),width=20, height=2)
 
-    show_initial_ui()
-    root.mainloop()
+

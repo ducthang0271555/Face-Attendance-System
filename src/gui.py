@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 from auth import login, register
 from database import Database
 from src.utils.camera import capture_image
@@ -9,7 +9,7 @@ class AttendanceApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Hệ Thống Chấm Công")
-        self.root.geometry("300x500")
+        self.root.geometry("900x600")
 
         self.main_frame = tk.Frame(root)
         self.main_frame.pack(fill=tk.BOTH, expand=True)
@@ -61,7 +61,7 @@ class AttendanceApp:
 
         tk.Button(self.main_frame, text="Đăng ký", command= lambda: self.show_register_form(), width=15, height=2).pack(pady=10)
         tk.Button(self.main_frame, text="Thêm nhân viên", command= lambda: self.show_add_employee(), width=15, height=2).pack(pady=10)
-        tk.Button(self.main_frame, text="Danh sách nhân viên", width=15, height=2).pack(pady=10)
+        tk.Button(self.main_frame, text="Danh sách nhân viên", command= lambda: self.show_employee_list(), width=15, height=2).pack(pady=10)
         tk.Button(self.main_frame, text="Đăng xuất", width=15, height=2, command=self.logout).pack(pady=10)
 
 
@@ -172,6 +172,109 @@ class AttendanceApp:
         else:
             db.cancel_employee(employee_id)
 
+    def show_employee_list(self):
+        for widget in self.main_frame.winfo_children():
+            widget.destroy()
 
+        tk.Label(self.main_frame, text="Danh sách nhân viên", font=("Arial", 14)).pack(pady=10)
 
+        columns = ("ID", "Mã NV", "Tên", "Giới tính", "Ngày sinh", "SĐT", "Địa chỉ", "Ảnh")
+        self.tree = ttk.Treeview(self.main_frame, columns=columns, show="headings")
 
+        for col in columns:
+            self.tree.heading(col, text=col)
+            self.tree.column(col, width=100)
+
+        self.tree.pack(pady=10, fill=tk.BOTH, expand=True)
+
+        db = Database()
+        employees = db.get_all_employees()
+
+        for emp in employees:
+            self.tree.insert("", "end", values=emp)
+
+        self.tree.bind("<Double-1>", self.on_employee_select)
+
+        tk.Button(self.main_frame, text="Quay Lại", command=self.show_manager_ui).pack(pady=10)
+
+    def on_employee_select(self, event):
+        selected_item = self.tree.selection()
+        if not selected_item:
+            return
+
+        item = self.tree.item(selected_item)
+        emp_data = item["values"]
+
+        self.show_edit_employee(emp_data)
+
+    def show_edit_employee(self, emp_data):
+        for widget in self.main_frame.winfo_children():
+            widget.destroy()
+
+        emp_id, employee_code, name, gender, dob, phone, address, *_ = emp_data
+
+        tk.Label(self.main_frame, text="Cập nhật nhân viên", font=("Arial", 14)).pack(pady=10)
+
+        tk.Label(self.main_frame, text="Mã nhân viên:").pack(pady=5)
+        self.employee_code_var = tk.StringVar(value=employee_code)
+        tk.OptionMenu(self.main_frame, self.employee_code_var, "NV", "TP", "GD").pack(pady=5)
+
+        tk.Label(self.main_frame, text="Tên:").pack()
+        name_entry = tk.Entry(self.main_frame)
+        name_entry.insert(0, name)
+        name_entry.pack()
+
+        tk.Label(self.main_frame, text="Giới tính:").pack()
+        gender_var = tk.StringVar(value=gender)
+        tk.OptionMenu(self.main_frame, gender_var, "Nam", "Nữ", "Khác").pack()
+
+        tk.Label(self.main_frame, text="Ngày sinh:").pack(pady=5)
+        self.dob_entry = tk.Entry(self.main_frame)
+        self.dob_entry.insert(0, dob)
+        self.dob_entry.pack(pady=5)
+        self.dob_entry.bind("<KeyRelease>", self.format_dob)
+
+        tk.Label(self.main_frame, text="Số điện thoại:").pack()
+        phone_entry = tk.Entry(self.main_frame)
+        phone_entry.insert(0, phone)
+        phone_entry.pack()
+
+        tk.Label(self.main_frame, text="Địa chỉ:").pack()
+        address_entry = tk.Entry(self.main_frame)
+        address_entry.insert(0, address)
+        address_entry.pack()
+
+        tk.Button(self.main_frame, text="Chụp lại ảnh",
+                  command=lambda: capture_image(emp_id, employee_code, name_entry.get())).pack(pady=5)
+        tk.Button(self.main_frame, text="Lưu", command=lambda: self.update_employee(
+            emp_id, self.employee_code_var.get(), name_entry.get(), gender_var.get(), self.dob_entry.get(),
+            phone_entry.get(), address_entry.get())
+                  ).pack(pady=5)
+
+        tk.Button(self.main_frame, text="Xóa", command=lambda: self.delete_employee(emp_id)).pack(pady=5)
+        tk.Button(self.main_frame, text="Quay Lại", command=self.show_employee_list).pack(pady=5)
+
+    def update_employee(self, emp_id, employee_code, name, gender, dob, phone, address):
+        db = Database()
+        db.cursor.execute("""
+            UPDATE employees 
+            SET employee_code=?, name=?, gender=?, dob=?, phone=?, address=? 
+            WHERE id=?
+        """, (employee_code, name, gender, dob, phone, address, emp_id))
+
+        db.conn.commit()
+        db.close()
+
+        messagebox.showinfo("Thành công", "Nhân viên đã được cập nhật!")
+        self.show_employee_list()
+
+    def delete_employee(self, emp_id):
+        confirm = messagebox.askyesno("Xác nhận", "Bạn có chắc muốn xóa nhân viên này?")
+        if confirm:
+            db = Database()
+            db.cursor.execute("DELETE FROM employees WHERE id=?", (emp_id,))
+            db.conn.commit()
+            db.close()
+
+            messagebox.showinfo("Thành công", "Nhân viên đã bị xóa!")
+            self.show_employee_list()

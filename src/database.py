@@ -58,5 +58,9 @@ class Database:
 
         self.conn.commit()
 
+    def get_all_employees(self):
+        self.cursor.execute("SELECT * FROM employees")
+        return self.cursor.fetchall()
+
     def close(self):
         self.conn.close()

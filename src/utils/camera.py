@@ -22,9 +22,10 @@ def capture_image(id, code, name):
                 os.makedirs("images")
 
             sanitized_name = name.replace(" ", "_")
-            image_path = f"images/{employee_code}_{sanitized_name}_{employee_id}.jpg"
+            image_path = f"images/{code}_{id}_{sanitized_name}.jpg"
 
-            save_img_of_employee(employee_id, image_path)
+            db = Database()
+            db.save_img_of_employee(id, image_path)
 
             cv2.imwrite(image_path, frame)
             messagebox.showinfo("Chúc mừng", "Bạn đã thêm thành công nhân viên!")

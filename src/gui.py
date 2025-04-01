@@ -3,13 +3,15 @@ from tkinter import messagebox, ttk
 from auth import login, register
 from database import Database
 from src.utils.camera import capture_image
+from PIL import Image, ImageTk
+
 
 
 class AttendanceApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Hệ Thống Chấm Công")
-        self.root.geometry("900x600")
+        self.root.geometry("900x800")
 
         self.main_frame = tk.Frame(root)
         self.main_frame.pack(fill=tk.BOTH, expand=True)
@@ -211,7 +213,9 @@ class AttendanceApp:
         for widget in self.main_frame.winfo_children():
             widget.destroy()
 
-        emp_id, employee_code, name, gender, dob, phone, address, *_ = emp_data
+        emp_id, employee_code, name, gender, dob, phone, address, image_path, *_ = emp_data
+
+        self.new_image_path = image_path
 
         tk.Label(self.main_frame, text="Cập nhật nhân viên", font=("Arial", 14)).pack(pady=10)
 
@@ -244,26 +248,32 @@ class AttendanceApp:
         address_entry.insert(0, address)
         address_entry.pack()
 
+        self.img_label = tk.Label(self.main_frame)
+        self.img_label.pack(pady=5)
+
+        if image_path:
+            try:
+                img = Image.open(image_path)
+                img = img.resize((150, 150))
+                self.photo = ImageTk.PhotoImage(img)
+                self.img_label.config(image=self.photo)
+            except Exception as e:
+                print(f"Lỗi mở ảnh: {e}")
+                tk.Label(self.main_frame, text="Không thể hiển thị ảnh").pack(pady=5)
+
         tk.Button(self.main_frame, text="Chụp lại ảnh",
                   command=lambda: capture_image(emp_id, employee_code, name_entry.get())).pack(pady=5)
         tk.Button(self.main_frame, text="Lưu", command=lambda: self.update_employee(
             emp_id, self.employee_code_var.get(), name_entry.get(), gender_var.get(), self.dob_entry.get(),
-            phone_entry.get(), address_entry.get())
+            phone_entry.get(), address_entry.get(), self.new_image_path)
                   ).pack(pady=5)
 
         tk.Button(self.main_frame, text="Xóa", command=lambda: self.delete_employee(emp_id)).pack(pady=5)
         tk.Button(self.main_frame, text="Quay Lại", command=self.show_employee_list).pack(pady=5)
 
-    def update_employee(self, emp_id, employee_code, name, gender, dob, phone, address):
+    def update_employee(self, emp_id, employee_code, name, gender, dob, phone, address, img_path):
         db = Database()
-        db.cursor.execute("""
-            UPDATE employees 
-            SET employee_code=?, name=?, gender=?, dob=?, phone=?, address=? 
-            WHERE id=?
-        """, (employee_code, name, gender, dob, phone, address, emp_id))
-
-        db.conn.commit()
-        db.close()
+        db.update_employee(emp_id, employee_code, name, gender, dob, phone, address, img_path)
 
         messagebox.showinfo("Thành công", "Nhân viên đã được cập nhật!")
         self.show_employee_list()
@@ -272,9 +282,6 @@ class AttendanceApp:
         confirm = messagebox.askyesno("Xác nhận", "Bạn có chắc muốn xóa nhân viên này?")
         if confirm:
             db = Database()
-            db.cursor.execute("DELETE FROM employees WHERE id=?", (emp_id,))
-            db.conn.commit()
-            db.close()
-
+            db.delete_employee(emp_id)
             messagebox.showinfo("Thành công", "Nhân viên đã bị xóa!")
             self.show_employee_list()

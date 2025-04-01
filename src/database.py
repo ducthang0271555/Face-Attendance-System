@@ -30,23 +30,19 @@ class Database:
                 password TEXT NOT NULL
             )
         ''')
-
         self.conn.commit()
 
     def save_employee(self, employee_code, name, gender, dob, phone, address):
         self.cursor.execute("""
         INSERT INTO employees (employee_code, name, gender, dob, phone, address) VALUES (?, ?, ?, ?, ?, ?)
         """, (employee_code, name, gender, dob, phone, address))
-
         employee_id = self.cursor.lastrowid
-
         self.conn.commit()
         return employee_id
 
     def cancel_employee(self, employee_id):
         self.cursor.execute("""
         DELETE FROM employees WHERE id = ?""", (employee_id,))
-
         self.conn.commit()
 
     def save_img_of_employee(self, employee_id, image_path):
@@ -55,12 +51,23 @@ class Database:
                     SET image_path = ?
                     WHERE id = ?
                 """, (image_path, employee_id))
-
         self.conn.commit()
 
     def get_all_employees(self):
         self.cursor.execute("SELECT * FROM employees")
         return self.cursor.fetchall()
+
+    def update_employee(self, emp_id, employee_code, name, gender, dob, phone, address, img_path):
+        self.cursor.execute("""
+            UPDATE employees 
+            SET employee_code=?, name=?, gender=?, dob=?, phone=?, address=?, image_path=? 
+            WHERE id=?
+        """, (employee_code, name, gender, dob, phone, address, img_path, emp_id))
+        self.conn.commit()
+
+    def delete_employee(self, emp_id):
+        self.cursor.execute("DELETE FROM employees WHERE id=?", (emp_id,))
+        self.conn.commit()
 
     def close(self):
         self.conn.close()

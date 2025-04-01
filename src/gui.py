@@ -1,8 +1,10 @@
+import os
+import shutil
 import tkinter as tk
 from tkinter import messagebox, ttk
 from auth import login, register
 from database import Database
-from src.utils.camera import capture_image
+from src.utils.camera import capture_image, update_image
 from PIL import Image, ImageTk
 
 
@@ -216,6 +218,7 @@ class AttendanceApp:
         emp_id, employee_code, name, gender, dob, phone, address, image_path, *_ = emp_data
 
         self.new_image_path = image_path
+        self.img_origin = image_path
 
         tk.Label(self.main_frame, text="Cập nhật nhân viên", font=("Arial", 14)).pack(pady=10)
 
@@ -251,18 +254,33 @@ class AttendanceApp:
         self.img_label = tk.Label(self.main_frame)
         self.img_label.pack(pady=5)
 
-        if image_path:
+        # Hiển thị ảnh nếu có
+        if self.new_image_path:
             try:
-                img = Image.open(image_path)
-                img = img.resize((150, 150))
+                img = Image.open(self.new_image_path)
+                img = img.resize((150, 150))  # Resize ảnh về 150x150
                 self.photo = ImageTk.PhotoImage(img)
                 self.img_label.config(image=self.photo)
             except Exception as e:
                 print(f"Lỗi mở ảnh: {e}")
                 tk.Label(self.main_frame, text="Không thể hiển thị ảnh").pack(pady=5)
 
+        def update_new_image(emp_id, employee_code, name_entry):
+            img_path_temp = update_image(emp_id, employee_code, name_entry)
+            if img_path_temp:
+                self.new_image_path = img_path_temp
+                try:
+                    img = Image.open(self.new_image_path)
+                    img = img.resize((150, 150))
+                    self.photo = ImageTk.PhotoImage(img)
+                    self.img_label.config(image=self.photo)  # Cập nhật ảnh trong Label
+                except Exception as e:
+                    print(f"Lỗi mở ảnh mới: {e}")
+                    tk.Label(self.main_frame, text="Không thể hiển thị ảnh mới").pack(pady=5)
+
         tk.Button(self.main_frame, text="Chụp lại ảnh",
-                  command=lambda: capture_image(emp_id, employee_code, name_entry.get())).pack(pady=5)
+                  command=lambda: update_new_image(emp_id, employee_code, name_entry.get())).pack(pady=5)
+
         tk.Button(self.main_frame, text="Lưu", command=lambda: self.update_employee(
             emp_id, self.employee_code_var.get(), name_entry.get(), gender_var.get(), self.dob_entry.get(),
             phone_entry.get(), address_entry.get(), self.new_image_path)
@@ -272,10 +290,48 @@ class AttendanceApp:
         tk.Button(self.main_frame, text="Quay Lại", command=self.show_employee_list).pack(pady=5)
 
     def update_employee(self, emp_id, employee_code, name, gender, dob, phone, address, img_path):
-        db = Database()
-        db.update_employee(emp_id, employee_code, name, gender, dob, phone, address, img_path)
+        # Lưu lại ảnh tạm
+        img_temp = img_path
+        img_old = img_path
 
-        messagebox.showinfo("Thành công", "Nhân viên đã được cập nhật!")
+        sanitized_name = name.replace(" ", "_")
+        new_img_path = f"images/{employee_code}_{emp_id}_{sanitized_name}.jpg"
+
+        if img_old != new_img_path:
+            try:
+                os.rename(img_old, new_img_path)
+                img_path = new_img_path
+            except Exception as e:
+                t = 1
+
+
+        if img_path and '_temp' in img_path:
+            if img_temp and os.path.exists(img_temp):
+                # Lấy tên file gốc (không có _temp)
+                original_img_path = img_temp.replace('_temp', '')  # Xóa _temp trong tên file
+
+                # Xóa ảnh cũ (nếu có)
+                if os.path.exists(original_img_path):
+                    os.remove(original_img_path)
+
+                # Di chuyển ảnh mới từ ảnh tạm và bỏ _temp
+                shutil.move(img_temp, original_img_path)  # Di chuyển và đổi tên ảnh
+
+                # Cập nhật thông tin nhân viên trong cơ sở dữ liệu
+                db = Database()
+                db.update_employee(emp_id, employee_code, name, gender, dob, phone, address, original_img_path)
+
+                messagebox.showinfo("Thành công", "Nhân viên đã được cập nhật!")
+            else:
+                messagebox.showerror("Lỗi", "Đường dẫn ảnh không hợp lệ!")
+        else:
+            if self.img_origin and os.path.exists(self.img_origin):
+                os.remove(self.img_origin)
+
+            db = Database()
+            db.update_employee(emp_id, employee_code, name, gender, dob, phone, address, img_path)
+
+            messagebox.showinfo("Thành công", "Nhân viên đã được cập nhật!")
         self.show_employee_list()
 
     def delete_employee(self, emp_id):

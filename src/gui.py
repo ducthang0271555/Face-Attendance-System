@@ -4,9 +4,11 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from auth import login, register
 from database import Database
-from src.utils.camera import capture_image, update_image
+from utils.camera import capture_image, update_image
 from PIL import Image, ImageTk
-
+import cv2
+import os
+from deepface import DeepFace
 
 
 class AttendanceApp:
@@ -57,7 +59,71 @@ class AttendanceApp:
         self.show_main_buttons()
 
     def attendance(self):
-        messagebox.showerror("Hehe", "Co cai cc")
+        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+
+        thu_muc_anh_mau = "images"
+        nguong_distance = 0.3  # Tùy chỉnh ngưỡng so sánh
+        xac_thuc_thanh_cong = False
+
+        cap = cv2.VideoCapture(0)
+
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            cv2.imshow("Nhan dien khuon mat (Nhan ESC de thoat)", frame)
+
+            # Chuyển sang ảnh xám để detect khuôn mặt
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+
+            if len(faces) > 0:
+                cv2.imwrite("temp_frame.jpg", frame)
+
+                # Duyệt qua tất cả ảnh trong thư mục
+                for ten_file in os.listdir(thu_muc_anh_mau):
+                    duong_dan_anh_mau = os.path.join(thu_muc_anh_mau, ten_file)
+
+                    try:
+                        result = DeepFace.verify(
+                            "temp_frame.jpg",
+                            duong_dan_anh_mau,
+                            model_name="Facenet512",
+                            enforce_detection=False
+                        )
+
+                        if result["verified"] and result["distance"] < nguong_distance:
+                            # lấy tên nv từ path images
+                            s = os.path.splitext(ten_file)[0]
+                            parts = s.split("_")
+                            full_name = " ".join(parts[2:])
+                            print(f"✅ Xác thực thành công: {full_name}")
+                            print("Khoảng cách:", result["distance"])
+                            xac_thuc_thanh_cong = True
+
+                            # Hiển thị tên người lên camera
+                            cv2.putText(frame, f"Xac thuc: {full_name}", (20, 50),
+                                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                            cv2.imshow("Nhan dien khuon mat", frame)
+                            cv2.waitKey(3000)
+                            break
+
+                    except Exception as e:
+                        print(f"Lỗi với ảnh {ten_file}: {e}")
+                        continue
+
+            if xac_thuc_thanh_cong:
+                break
+
+            if cv2.waitKey(1) & 0xFF == 27:
+                break
+
+        cap.release()
+        cv2.destroyAllWindows()
+
+
+
 
     def show_manager_ui(self):
         for widget in self.main_frame.winfo_children():

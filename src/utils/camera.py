@@ -2,7 +2,7 @@ import cv2
 import os
 import tkinter as tk
 from tkinter import messagebox
-from src.database import Database
+from database import Database
 
 def capture_image(id, code, name):
     if not id or not code or not name:

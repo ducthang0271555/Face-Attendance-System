@@ -22,7 +22,14 @@ class Database:
                 join_date DATE DEFAULT CURRENT_DATE
             )
         ''')
-
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS diem_danh (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ten TEXT,
+            thoi_gian TEXT,
+            loai TEXT
+        )
+    """)
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS managers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

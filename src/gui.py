@@ -9,7 +9,10 @@ from PIL import Image, ImageTk
 import cv2
 import os
 from deepface import DeepFace
-
+import time
+import sqlite3
+from datetime import datetime
+import pandas as pd
 
 class AttendanceApp:
     def __init__(self, root):
@@ -57,8 +60,42 @@ class AttendanceApp:
         is_logged_in = False
         messagebox.showinfo("Đăng xuất", "Bạn đã đăng xuất thành công!")
         self.show_main_buttons()
+    
+    def ghi_diem_danh(self,ten):
+        conn = sqlite3.connect("./attendance.db")
+        cursor = conn.cursor()
+        ngay = datetime.now().strftime("%Y-%m-%d")
+
+        # Lấy tất cả lượt điểm danh hôm nay của người đó
+        cursor.execute("""
+            SELECT * FROM diem_danh
+            WHERE ten = ? AND DATE(thoi_gian) = ?
+            ORDER BY thoi_gian ASC
+        """, (ten, ngay))
+        cac_lan_diem_danh = cursor.fetchall()
+
+        if len(cac_lan_diem_danh) == 0:
+            loai = "vao"
+        elif len(cac_lan_diem_danh) == 1:
+            loai = "ra"
+        else:
+            print(f"⚠️ {ten} đã điểm danh đủ 2 lần hôm nay.")
+            conn.close()
+            return
+
+        thoi_gian = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute("""
+            INSERT INTO diem_danh (ten, thoi_gian, loai)
+            VALUES (?, ?, ?)
+        """, (ten, thoi_gian, loai))
+        conn.commit()
+        conn.close()
+
+        print(f"✅ Ghi điểm danh: {ten} - {loai.upper()} lúc {thoi_gian}")
 
     def attendance(self):
+        start_time = time.time()
+        camera_on_duration = 15
         face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
         thu_muc_anh_mau = "images"
@@ -73,7 +110,9 @@ class AttendanceApp:
                 break
 
             cv2.imshow("Nhan dien khuon mat (Nhan ESC de thoat)", frame)
-
+            if time.time() - start_time > camera_on_duration:
+                messagebox.showerror("Lỗi,Không phát hiện khuôn mặt")
+                break
             # Chuyển sang ảnh xám để detect khuôn mặt
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             faces = face_cascade.detectMultiScale(gray, 1.3, 5)
@@ -100,14 +139,15 @@ class AttendanceApp:
                             full_name = " ".join(parts[2:])
                             print(f"✅ Xác thực thành công: {full_name}")
                             print("Khoảng cách:", result["distance"])
+                            self.ghi_diem_danh(full_name)
                             xac_thuc_thanh_cong = True
-
                             # Hiển thị tên người lên camera
                             cv2.putText(frame, f"Xac thuc: {full_name}", (20, 50),
                                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
                             cv2.imshow("Nhan dien khuon mat", frame)
                             cv2.waitKey(3000)
                             break
+                        
 
                     except Exception as e:
                         print(f"Lỗi với ảnh {ten_file}: {e}")
@@ -122,17 +162,143 @@ class AttendanceApp:
         cap.release()
         cv2.destroyAllWindows()
 
+    def xuat_excel(self,theo_ngay=None, theo_thang=None):
+        conn = sqlite3.connect("attendance.db")
+        query = "SELECT ten, thoi_gian, loai FROM diem_danh"
+        df = pd.read_sql_query(query, conn)
+        conn.close()
 
+        df["thoi_gian"] = pd.to_datetime(df["thoi_gian"])
 
+        if theo_ngay:
+            try:
+                ngay = pd.to_datetime(theo_ngay)
+                df = df[df["thoi_gian"].dt.date == ngay.date()]
+                file_name = f"diem_danh_ngay_{ngay.strftime('%Y_%m_%d')}.xlsx"
+            except:
+                messagebox.showerror("Lỗi", "Ngày không hợp lệ (YYYY-MM-DD)")
+                return
+
+        elif theo_thang:
+            try:
+                thang = pd.to_datetime(theo_thang + "-01")
+                df = df[(df["thoi_gian"].dt.month == thang.month) & (df["thoi_gian"].dt.year == thang.year)]
+                file_name = f"diem_danh_thang_{thang.strftime('%Y_%m')}.xlsx"
+            except:
+                messagebox.showerror("Lỗi", "Tháng không hợp lệ (YYYY-MM)")
+                return
+        else:
+            file_name = "diem_danh_toan_bo.xlsx"
+
+        df = df.sort_values(by=["thoi_gian"])
+        df.to_excel(file_name, index=False)
+        messagebox.showinfo("Thành công", f"Đã xuất: {file_name}")
+        # ✅ Tự động mở file Excel
+        try:
+            os.startfile(file_name)  # Windows
+        except AttributeError:
+            try:
+                import subprocess
+                subprocess.call(["open", file_name])  # macOS
+            except:
+                subprocess.call(["xdg-open", file_name])  # Linux
+    def tao_giao_dien_bao_cao_cong(self):
+        root = tk.Tk()
+        root.title("Xuất Excel điểm danh")
+
+        tk.Label(root, text="Ngày (YYYY-MM-DD):").grid(row=0, column=0, padx=10, pady=5)
+        entry_ngay = tk.Entry(root, width=20)
+        entry_ngay.grid(row=0, column=1)
+
+        tk.Label(root, text="Tháng (YYYY-MM):").grid(row=1, column=0, padx=10, pady=5)
+        entry_thang = tk.Entry(root, width=20)
+        entry_thang.grid(row=1, column=1)
+
+        def xuat():
+            ngay = entry_ngay.get().strip()
+            thang = entry_thang.get().strip()
+            
+            self.xuat_excel(theo_ngay=ngay if ngay else None,
+                    theo_thang=thang if thang else None)
+
+        tk.Button(root, text="Xuất Excel", command=xuat, bg="green", fg="white", padx=10).grid(row=2, columnspan=2, pady=10)
+
+        root.mainloop()
+    def lay_du_lieu(self,theo_ngay=None, theo_thang=None):
+        conn = sqlite3.connect("attendance.db")
+        query = "SELECT ten, thoi_gian, loai FROM diem_danh"
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+
+        df["thoi_gian"] = pd.to_datetime(df["thoi_gian"])
+
+        if theo_ngay:
+            try:
+                ngay = pd.to_datetime(theo_ngay)
+                df = df[df["thoi_gian"].dt.date == ngay.date()]
+            except:
+                messagebox.showerror("Lỗi", "Ngày không hợp lệ (YYYY-MM-DD)")
+                return pd.DataFrame()
+
+        elif theo_thang:
+            try:
+                thang = pd.to_datetime(theo_thang + "-01")
+                df = df[(df["thoi_gian"].dt.month == thang.month) & (df["thoi_gian"].dt.year == thang.year)]
+            except:
+                messagebox.showerror("Lỗi", "Tháng không hợp lệ (YYYY-MM)")
+                return pd.DataFrame()
+
+        df = df.sort_values(by="thoi_gian")
+        return df
+    def tao_giao_dien_lich_su(self):
+        root = tk.Tk()
+        root.title("🕒 Lịch sử điểm danh")
+
+        # Entry nhập ngày
+        tk.Label(root, text="Ngày (YYYY-MM-DD):").grid(row=0, column=0, padx=5, pady=5, sticky="e")
+        entry_ngay = tk.Entry(root)
+        entry_ngay.grid(row=0, column=1, padx=5)
+
+        # Entry nhập tháng
+        tk.Label(root, text="Tháng (YYYY-MM):").grid(row=1, column=0, padx=5, pady=5, sticky="e")
+        entry_thang = tk.Entry(root)
+        entry_thang.grid(row=1, column=1, padx=5)
+
+        # Bảng Treeview hiển thị dữ liệu
+        cols = ("ten", "thoi_gian", "loai")
+        tree = ttk.Treeview(root, columns=cols, show="headings")
+        for col in cols:
+            tree.heading(col, text=col)
+            tree.column(col, width=150)
+        tree.grid(row=3, column=0, columnspan=2, padx=10, pady=10)
+
+        # Hàm xử lý khi bấm "Hiển thị"
+        def hien_thi():
+            for row in tree.get_children():
+                tree.delete(row)
+
+            ngay = entry_ngay.get().strip()
+            thang = entry_thang.get().strip()
+            df = self.lay_du_lieu(theo_ngay=ngay if ngay else None,
+                            theo_thang=thang if thang else None)
+
+            for _, row in df.iterrows():
+                tree.insert("", "end", values=(row["ten"], row["thoi_gian"], row["loai"]))
+
+        tk.Button(root, text="Hiển thị", command=hien_thi, bg="blue", fg="white", padx=10).grid(row=2, column=0, columnspan=2, pady=5)
+
+        root.mainloop()
 
     def show_manager_ui(self):
         for widget in self.main_frame.winfo_children():
             widget.destroy()
 
-        tk.Button(self.main_frame, text="Đăng ký", command= lambda: self.show_register_form(), width=15, height=2).pack(pady=10)
-        tk.Button(self.main_frame, text="Thêm nhân viên", command= lambda: self.show_add_employee(), width=15, height=2).pack(pady=10)
-        tk.Button(self.main_frame, text="Danh sách nhân viên", command= lambda: self.show_employee_list(), width=15, height=2).pack(pady=10)
-        tk.Button(self.main_frame, text="Đăng xuất", width=15, height=2, command=self.logout).pack(pady=10)
+        tk.Button(self.main_frame, text="Đăng ký", command= lambda: self.show_register_form(), width=20, height=2).pack(pady=15)
+        tk.Button(self.main_frame, text="Thêm nhân viên", command= lambda: self.show_add_employee(), width=20, height=2).pack(pady=15)
+        tk.Button(self.main_frame, text="Danh sách nhân viên", command= lambda: self.show_employee_list(), width=20, height=2).pack(pady=15)
+        tk.Button(self.main_frame, text="Xuất báo cáo chấm công", command= lambda: self.tao_giao_dien_bao_cao_cong(), width=20, height=2).pack(pady=15)
+        tk.Button(self.main_frame, text="Lịch sử chấm công", command= lambda: self.tao_giao_dien_lich_su(), width=20, height=2).pack(pady=15)
+        tk.Button(self.main_frame, text="Đăng xuất", width=20, height=2, command=self.logout).pack(pady=15)
 
 
     def show_main_buttons(self):

@@ -522,48 +522,31 @@ class AttendanceApp:
         tk.Button(self.main_frame, text="Quay Lại", command=self.show_employee_list).pack(pady=5)
 
     def update_employee(self, emp_id, employee_code, name, gender, dob, phone, address, img_path):
-        # Lưu lại ảnh tạm
-        img_temp = img_path
-        img_old = img_path
-
         sanitized_name = name.replace(" ", "_")
-        new_img_path = f"images/{employee_code}_{emp_id}_{sanitized_name}.jpg"
+        new_img_name = f"{employee_code}_{emp_id}_{sanitized_name}.jpg"
+        new_img_path = f"images/{new_img_name}"
 
-        if img_old != new_img_path:
-            try:
-                os.rename(img_old, new_img_path)
-                img_path = new_img_path
-            except Exception as e:
-                t = 1
+        db = Database()
 
-
+        # Nếu người dùng có chụp ảnh mới (ảnh tạm tồn tại và có "_temp" trong tên)
         if img_path and '_temp' in img_path:
-            if img_temp and os.path.exists(img_temp):
-                # Lấy tên file gốc (không có _temp)
-                original_img_path = img_temp.replace('_temp', '')  # Xóa _temp trong tên file
+            img_temp = img_path
+            original_img_path = img_temp.replace('_temp', '')
 
-                # Xóa ảnh cũ (nếu có)
-                if os.path.exists(original_img_path):
-                    os.remove(original_img_path)
+            # Xóa ảnh cũ nếu tồn tại
+            if os.path.exists(original_img_path):
+                os.remove(original_img_path)
 
-                # Di chuyển ảnh mới từ ảnh tạm và bỏ _temp
-                shutil.move(img_temp, original_img_path)  # Di chuyển và đổi tên ảnh
+            # Di chuyển ảnh mới từ temp -> ảnh chính thức
+            shutil.move(img_temp, original_img_path)
 
-                # Cập nhật thông tin nhân viên trong cơ sở dữ liệu
-                db = Database()
-                db.update_employee(emp_id, employee_code, name, gender, dob, phone, address, original_img_path)
-
-                messagebox.showinfo("Thành công", "Nhân viên đã được cập nhật!")
-            else:
-                messagebox.showerror("Lỗi", "Đường dẫn ảnh không hợp lệ!")
+            # Cập nhật DB với đường dẫn ảnh mới
+            db.update_employee(emp_id, employee_code, name, gender, dob, phone, address, original_img_path)
         else:
-            if self.img_origin and os.path.exists(self.img_origin):
-                os.remove(self.img_origin)
-
-            db = Database()
+            # Không thay đổi ảnh -> lấy lại ảnh cũ và chỉ cập nhật thông tin khác
             db.update_employee(emp_id, employee_code, name, gender, dob, phone, address, img_path)
 
-            messagebox.showinfo("Thành công", "Nhân viên đã được cập nhật!")
+        messagebox.showinfo("Thành công", "Nhân viên đã được cập nhật!")
         self.show_employee_list()
 
     def delete_employee(self, emp_id):

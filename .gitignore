@@ -3,3 +3,4 @@ venv/
 *.pyc
 *.pyo
 temp_frame.jpg
+images/

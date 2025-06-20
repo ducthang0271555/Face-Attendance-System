@@ -7,6 +7,8 @@ class Database:
         self.conn = sqlite3.connect(self.db_name)
         self.cursor = self.conn.cursor()
         self.create_tables()
+    
+
 
     def create_tables(self):
         self.cursor.execute('''
@@ -30,6 +32,14 @@ class Database:
             loai TEXT
         )
     """)
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS lich_lam (
+                ten TEXT,
+                ngay DATE,
+                gio_vao TEXT,
+                gio_ra TEXT
+            )
+        """)
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS managers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

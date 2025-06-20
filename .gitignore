@@ -4,3 +4,6 @@ venv/
 *.pyo
 temp_frame.jpg
 images/
+build/
+dist/
+main.spec

@@ -93,32 +93,96 @@ class AttendanceApp:
 
         print(f"✅ Ghi điểm danh: {ten} - {loai.upper()} lúc {thoi_gian}")
 
-    def danh_gia_diem_danh(self,ten):
+    def danh_gia_diem_danh(self, ten):
+        import sqlite3
+        from datetime import datetime
+
         conn = sqlite3.connect("attendance.db")
         cursor = conn.cursor()
 
-        today = datetime.now().strftime("%Y-%m-%d")
         now = datetime.now()
-
-        cursor.execute("SELECT gio_vao, gio_ra FROM lich_lam WHERE ten=? AND ngay=?", (ten, today))
-        result = cursor.fetchone()
-
-        if not result:
-            return "Không có lịch"
-
-        gio_vao = datetime.strptime(result[0], "%H:%M").time()
-        gio_ra = datetime.strptime(result[1], "%H:%M").time()
-
+        today = now.strftime("%Y-%m-%d")
+        thoi_gian = now.strftime("%Y-%m-%d %H:%M:%S")
         now_time = now.time()
 
-        if now_time <= (datetime.combine(now.date(), gio_vao) + timedelta(minutes=10)).time():
-            return "Vào"
-        elif now_time < gio_ra:
-            return "Trễ"
-        elif now_time >= gio_ra:
-            return "Ra"
+        # Lấy lịch làm việc hôm nay
+        cursor.execute("SELECT gio_vao, gio_ra FROM lich_lam WHERE ten=? AND ngay=?", (ten, today))
+        lich = cursor.fetchone()
+        if not lich:
+            print("❌ Không có lịch làm việc hôm nay.")
+            conn.close()
+            return "Không có lịch"
+
+        gio_vao = datetime.strptime(lich[0], "%H:%M").time()
+        gio_ra = datetime.strptime(lich[1], "%H:%M").time()
+
+        # Lấy thông tin nhân viên
+        cursor.execute("SELECT id, name FROM employees WHERE name=?", (ten,))
+        nv = cursor.fetchone()
+        if not nv:
+            print(f"❌ Không tìm thấy nhân viên: {ten}")
+            conn.close()
+            return "Không có nhân viên"
+        employee_id, employee_name = nv
+
+        # Đếm số lần điểm danh hôm nay
+        cursor.execute("SELECT COUNT(*) FROM diem_danh WHERE ten=? AND DATE(thoi_gian)=?", (ten, today))
+        count = cursor.fetchone()[0]
+
+        if count >= 2:
+            print("⚠️ Đã điểm danh đủ 2 lần.")
+            conn.close()
+            return "Đã đủ 2 lần"
+
+        # Phân loại
+        if count == 0:
+            if now_time <= (datetime.combine(now.date(), gio_vao) + timedelta(minutes=10)).time():
+                loai = "Vào đúng giờ"
+            else:
+                loai = "Đi trễ"
         else:
-            return "Không xác định"
+            if now_time >= gio_ra:
+                loai = "Ra đúng giờ"
+            else:
+                loai = "Ra sớm"
+
+        # Ghi vào diem_danh
+        cursor.execute("""
+            INSERT INTO diem_danh (ten, thoi_gian, loai)
+            VALUES (?, ?, ?)
+        """, (ten, thoi_gian, loai))
+
+        # Ghi vào attendance
+        if count == 0:
+            cursor.execute("""
+                INSERT INTO attendance (employee_id, employee_name, date, check_in, note)
+                VALUES (?, ?, ?, ?, ?)
+            """, (employee_id, employee_name, today, thoi_gian, loai))
+        elif count == 1:
+            # Lấy record cũ
+            cursor.execute("""
+                SELECT id, check_in, note FROM attendance
+                WHERE employee_id=? AND date=?
+            """, (employee_id, today))
+            row = cursor.fetchone()
+            if row:
+                att_id, check_in_str, note_cu = row
+                check_in = datetime.strptime(check_in_str, "%Y-%m-%d %H:%M:%S")
+                check_out = now
+                working_hours = round((check_out - check_in).total_seconds() / 3600, 2)
+                note_moi = f"{note_cu}, {loai}" if note_cu else loai
+
+                cursor.execute("""
+                    UPDATE attendance
+                    SET check_out = ?, note = ?, working_hours = ?
+                    WHERE id = ?
+                """, (thoi_gian, note_moi, working_hours, att_id))
+
+        conn.commit()
+        conn.close()
+
+        return loai
+
     def luu_diem_danh(self,ten, loai):
         conn = sqlite3.connect("attendance.db")
         cursor = conn.cursor()
@@ -171,19 +235,22 @@ class AttendanceApp:
                             s = os.path.splitext(ten_file)[0]
                             parts = s.split("_")
                             full_name = " ".join(parts[2:])
+
                             loai = self.danh_gia_diem_danh(full_name)
-                            self.luu_diem_danh(full_name,loai)
-                            print(f"✅ {full_name} đã điểm danh ({loai}) lúc {datetime.now().strftime('%H:%M:%S')}")
-                            print("Khoảng cách:", result["distance"])
-                            # self.ghi_diem_danh(full_name)
+
+                            if loai != "Đã đủ 2 lần":
+                                print(f"✅ {full_name} đã điểm danh ({loai}) lúc {datetime.now().strftime('%H:%M:%S')}")
+                                print("Khoảng cách:", result["distance"])
+
+                                cv2.putText(frame, f"Xac thuc: {full_name}", (20, 50),
+                                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                                cv2.imshow("Nhan dien khuon mat", frame)
+                                cv2.waitKey(3000)
+
                             xac_thuc_thanh_cong = True
-                            # Hiển thị tên người lên camera
-                            cv2.putText(frame, f"Xac thuc: {full_name}", (20, 50),
-                                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-                            cv2.imshow("Nhan dien khuon mat", frame)
-                            cv2.waitKey(3000)
-                            break
-                        
+                            break  # ❗ thoát khỏi vòng for
+
+
 
                     except Exception as e:
                         print(f"Lỗi với ảnh {ten_file}: {e}")
@@ -198,19 +265,31 @@ class AttendanceApp:
         cap.release()
         cv2.destroyAllWindows()
 
-    def xuat_excel(self,theo_ngay=None, theo_thang=None):
+    def xuat_excel(self, theo_ngay=None, theo_thang=None):
+        import sqlite3
+        import pandas as pd
+        import os
+        from tkinter import messagebox
+
         conn = sqlite3.connect("attendance.db")
-        query = "SELECT ten, thoi_gian, loai FROM diem_danh"
-        df = pd.read_sql_query(query, conn)
+
+        # Đọc dữ liệu bảng attendance
+        df = pd.read_sql_query("SELECT * FROM attendance", conn)
+
+        # Đọc thêm bảng employees để lấy lương
+        emp_df = pd.read_sql_query("SELECT id, name, salary_per_hour FROM employees", conn)
+
         conn.close()
 
-        df["thoi_gian"] = pd.to_datetime(df["thoi_gian"])
+        # Chuyển đổi định dạng ngày
+        df["date"] = pd.to_datetime(df["date"])
 
+        # Lọc theo ngày hoặc tháng nếu có
         if theo_ngay:
             try:
                 ngay = pd.to_datetime(theo_ngay)
-                df = df[df["thoi_gian"].dt.date == ngay.date()]
-                file_name = f"diem_danh_ngay_{ngay.strftime('%Y_%m_%d')}.xlsx"
+                df = df[df["date"].dt.date == ngay.date()]
+                file_name = f"attendance_{ngay.strftime('%Y_%m_%d')}.xlsx"
             except:
                 messagebox.showerror("Lỗi", "Ngày không hợp lệ (YYYY-MM-DD)")
                 return
@@ -218,18 +297,34 @@ class AttendanceApp:
         elif theo_thang:
             try:
                 thang = pd.to_datetime(theo_thang + "-01")
-                df = df[(df["thoi_gian"].dt.month == thang.month) & (df["thoi_gian"].dt.year == thang.year)]
-                file_name = f"diem_danh_thang_{thang.strftime('%Y_%m')}.xlsx"
+                df = df[(df["date"].dt.month == thang.month) & (df["date"].dt.year == thang.year)]
+                file_name = f"attendance_{thang.strftime('%Y_%m')}.xlsx"
             except:
                 messagebox.showerror("Lỗi", "Tháng không hợp lệ (YYYY-MM)")
                 return
         else:
-            file_name = "diem_danh_toan_bo.xlsx"
+            file_name = "attendance_full.xlsx"
 
-        df = df.sort_values(by=["thoi_gian"])
-        df.to_excel(file_name, index=False)
+        # Tính bảng lương
+        salary_df = (
+            df.groupby(["employee_id", "employee_name"])["working_hours"]
+            .sum()
+            .reset_index()
+            .merge(emp_df, left_on="employee_id", right_on="id")
+        )
+
+        salary_df["salary_per_hour"] = salary_df["salary_per_hour"].fillna(0)
+        salary_df["total_salary"] = salary_df["working_hours"] * salary_df["salary_per_hour"]
+        salary_df = salary_df[["employee_id", "employee_name", "working_hours", "salary_per_hour", "total_salary"]]
+
+        # Xuất ra Excel với 2 sheet
+        with pd.ExcelWriter(file_name, engine='openpyxl') as writer:
+            df.sort_values("date").to_excel(writer, sheet_name="Attendance", index=False)
+            salary_df.to_excel(writer, sheet_name="Bảng Lương", index=False)
+
         messagebox.showinfo("Thành công", f"Đã xuất: {file_name}")
-        # ✅ Tự động mở file Excel
+
+        # Tự động mở file
         try:
             os.startfile(file_name)  # Windows
         except AttributeError:
@@ -238,6 +333,7 @@ class AttendanceApp:
                 subprocess.call(["open", file_name])  # macOS
             except:
                 subprocess.call(["xdg-open", file_name])  # Linux
+
     def tao_giao_dien_bao_cao_cong(self):
         root = tk.Tk()
         root.title("Xuất Excel điểm danh")
@@ -262,33 +358,25 @@ class AttendanceApp:
         root.mainloop()
     def lay_du_lieu(self,theo_ngay=None, theo_thang=None):
         conn = sqlite3.connect("attendance.db")
-        query = "SELECT ten, thoi_gian, loai FROM diem_danh"
-        df = pd.read_sql_query(query, conn)
-        conn.close()
 
-        df["thoi_gian"] = pd.to_datetime(df["thoi_gian"])
+        query = "SELECT * FROM attendance"
+        conditions = []
 
         if theo_ngay:
-            try:
-                ngay = pd.to_datetime(theo_ngay)
-                df = df[df["thoi_gian"].dt.date == ngay.date()]
-            except:
-                messagebox.showerror("Lỗi", "Ngày không hợp lệ (YYYY-MM-DD)")
-                return pd.DataFrame()
-
+            conditions.append(f"date = '{theo_ngay}'")
         elif theo_thang:
-            try:
-                thang = pd.to_datetime(theo_thang + "-01")
-                df = df[(df["thoi_gian"].dt.month == thang.month) & (df["thoi_gian"].dt.year == thang.year)]
-            except:
-                messagebox.showerror("Lỗi", "Tháng không hợp lệ (YYYY-MM)")
-                return pd.DataFrame()
+            conditions.append(f"strftime('%Y-%m', date) = '{theo_thang}'")
 
-        df = df.sort_values(by="thoi_gian")
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+
+        df = pd.read_sql_query(query, conn)
+        conn.close()
         return df
+
     def tao_giao_dien_lich_su(self):
         root = tk.Tk()
-        root.title("🕒 Lịch sử điểm danh")
+        root.title("🕒 Lịch sử chấm công (attendance)")
 
         # Entry nhập ngày
         tk.Label(root, text="Ngày (YYYY-MM-DD):").grid(row=0, column=0, padx=5, pady=5, sticky="e")
@@ -301,11 +389,11 @@ class AttendanceApp:
         entry_thang.grid(row=1, column=1, padx=5)
 
         # Bảng Treeview hiển thị dữ liệu
-        cols = ("ten", "thoi_gian", "loai")
+        cols = ("employee_name", "date", "check_in", "check_out", "note", "working_hours")
         tree = ttk.Treeview(root, columns=cols, show="headings")
         for col in cols:
             tree.heading(col, text=col)
-            tree.column(col, width=150)
+            tree.column(col, width=120)
         tree.grid(row=3, column=0, columnspan=2, padx=10, pady=10)
 
         # Hàm xử lý khi bấm "Hiển thị"
@@ -315,13 +403,22 @@ class AttendanceApp:
 
             ngay = entry_ngay.get().strip()
             thang = entry_thang.get().strip()
+
             df = self.lay_du_lieu(theo_ngay=ngay if ngay else None,
-                            theo_thang=thang if thang else None)
+                                             theo_thang=thang if thang else None)
 
             for _, row in df.iterrows():
-                tree.insert("", "end", values=(row["ten"], row["thoi_gian"], row["loai"]))
+                tree.insert("", "end", values=(
+                    row["employee_name"],
+                    row["date"],
+                    row["check_in"],
+                    row["check_out"],
+                    row["note"],
+                    row["working_hours"]
+                ))
 
-        tk.Button(root, text="Hiển thị", command=hien_thi, bg="blue", fg="white", padx=10).grid(row=2, column=0, columnspan=2, pady=5)
+        tk.Button(root, text="Hiển thị", command=hien_thi, bg="blue", fg="white", padx=10).grid(row=2, column=0,
+                                                                                                columnspan=2, pady=5)
 
         root.mainloop()
 
@@ -385,6 +482,10 @@ class AttendanceApp:
         self.dob_entry.pack(pady=5)
         self.dob_entry.bind("<KeyRelease>", self.format_dob)
 
+        tk.Label(self.main_frame, text="Lương cơ bản 1 giờ:").pack(pady=5)
+        self.salary_entry = tk.Entry(self.main_frame)
+        self.salary_entry.pack(pady=5)
+
         tk.Label(self.main_frame, text="Số điện thoại:").pack(pady=5)
         self.phone_entry = tk.Entry(self.main_frame)
         self.phone_entry.pack(pady=5)
@@ -428,6 +529,7 @@ class AttendanceApp:
         name = self.name_entry.get()
         gender = self.gender_var.get()
         dob = self.dob_entry.get().strip()
+        salary_per_hour = self.salary_entry.get()
         phone = self.phone_entry.get().strip()
         address = self.address_entry.get().strip()
 
@@ -436,7 +538,7 @@ class AttendanceApp:
             return
 
         db = Database()
-        employee_id = db.save_employee(employee_code, name, gender, dob, phone, address)
+        employee_id = db.save_employee(employee_code, name, gender, dob, salary_per_hour, phone, address)
 
         confirm = messagebox.askokcancel("Thành công", "Thêm nhân viên thành công, tiến hành chụp ảnh nhân viên?")
         if confirm:
@@ -450,7 +552,7 @@ class AttendanceApp:
 
         tk.Label(self.main_frame, text="Danh sách nhân viên", font=("Arial", 14)).pack(pady=10)
 
-        columns = ("ID", "Mã NV", "Tên", "Giới tính", "Ngày sinh", "SĐT", "Địa chỉ", "Ảnh")
+        columns = ("ID", "Mã NV", "Tên", "Giới tính", "Ngày sinh", "Lương 1 giờ", "SĐT", "Địa chỉ", "Ảnh")
         self.tree = ttk.Treeview(self.main_frame, columns=columns, show="headings")
 
         for col in columns:
@@ -483,7 +585,7 @@ class AttendanceApp:
         for widget in self.main_frame.winfo_children():
             widget.destroy()
 
-        emp_id, employee_code, name, gender, dob, phone, address, image_path, *_ = emp_data
+        emp_id, employee_code, name, gender, dob, salary_per_hour, phone, address, image_path, *_ = emp_data
 
         self.new_image_path = image_path
         self.img_origin = image_path
@@ -508,6 +610,11 @@ class AttendanceApp:
         self.dob_entry.insert(0, dob)
         self.dob_entry.pack(pady=5)
         self.dob_entry.bind("<KeyRelease>", self.format_dob)
+
+        tk.Label(self.main_frame, text="Lương cơ bản 1 giờ:").pack()
+        self.salary_entry = tk.Entry(self.main_frame)
+        self.salary_entry.insert(0, salary_per_hour)
+        self.salary_entry.pack()
 
         tk.Label(self.main_frame, text="Số điện thoại:").pack()
         phone_entry = tk.Entry(self.main_frame)
@@ -550,14 +657,14 @@ class AttendanceApp:
                   command=lambda: update_new_image(emp_id, employee_code, name_entry.get())).pack(pady=5)
 
         tk.Button(self.main_frame, text="Lưu", command=lambda: self.update_employee(
-            emp_id, self.employee_code_var.get(), name_entry.get(), gender_var.get(), self.dob_entry.get(),
+            emp_id, self.employee_code_var.get(), name_entry.get(), gender_var.get(), self.dob_entry.get(), self.salary_entry.get(),
             phone_entry.get(), address_entry.get(), self.new_image_path)
                   ).pack(pady=5)
 
         tk.Button(self.main_frame, text="Xóa", command=lambda: self.delete_employee(emp_id)).pack(pady=5)
         tk.Button(self.main_frame, text="Quay Lại", command=self.show_employee_list).pack(pady=5)
 
-    def update_employee(self, emp_id, employee_code, name, gender, dob, phone, address, img_path):
+    def update_employee(self, emp_id, employee_code, name, gender, dob, salary_per_hour, phone, address, img_path):
         sanitized_name = name.replace(" ", "_")
         new_img_name = f"{employee_code}_{emp_id}_{sanitized_name}.jpg"
         new_img_path = f"images/{new_img_name}"
@@ -577,10 +684,10 @@ class AttendanceApp:
             shutil.move(img_temp, original_img_path)
 
             # Cập nhật DB với đường dẫn ảnh mới
-            db.update_employee(emp_id, employee_code, name, gender, dob, phone, address, original_img_path)
+            db.update_employee(emp_id, employee_code, name, gender, dob, salary_per_hour, phone, address, original_img_path)
         else:
             # Không thay đổi ảnh -> lấy lại ảnh cũ và chỉ cập nhật thông tin khác
-            db.update_employee(emp_id, employee_code, name, gender, dob, phone, address, img_path)
+            db.update_employee(emp_id, employee_code, name, gender, dob, salary_per_hour, phone, address, img_path)
 
         messagebox.showinfo("Thành công", "Nhân viên đã được cập nhật!")
         self.show_employee_list()

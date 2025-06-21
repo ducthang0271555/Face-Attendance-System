@@ -49,10 +49,10 @@ class Database:
         ''')
         self.conn.commit()
 
-    def save_employee(self, employee_code, name, gender, dob, phone, address):
+    def save_employee(self, employee_code, name, gender, dob, salary_per_hour, phone, address):
         self.cursor.execute("""
-        INSERT INTO employees (employee_code, name, gender, dob, phone, address) VALUES (?, ?, ?, ?, ?, ?)
-        """, (employee_code, name, gender, dob, phone, address))
+        INSERT INTO employees (employee_code, name, gender, dob, salary_per_hour, phone, address) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (employee_code, name, gender, dob, salary_per_hour, phone, address))
         employee_id = self.cursor.lastrowid
         self.conn.commit()
         return employee_id
@@ -74,12 +74,12 @@ class Database:
         self.cursor.execute("SELECT * FROM employees")
         return self.cursor.fetchall()
 
-    def update_employee(self, emp_id, employee_code, name, gender, dob, phone, address, img_path):
+    def update_employee(self, emp_id, employee_code, name, gender, dob, salary_per_hour, phone, address, img_path):
         self.cursor.execute("""
             UPDATE employees 
-            SET employee_code=?, name=?, gender=?, dob=?, phone=?, address=?, image_path=? 
+            SET employee_code=?, name=?, gender=?, dob=?, salary_per_hour=?, phone=?, address=?, image_path=? 
             WHERE id=?
-        """, (employee_code, name, gender, dob, phone, address, img_path, emp_id))
+        """, (employee_code, name, gender, dob, salary_per_hour, phone, address, img_path, emp_id))
         self.conn.commit()
 
     def delete_employee(self, emp_id):
